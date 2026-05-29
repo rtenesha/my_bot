@@ -1,24 +1,52 @@
-from pyairtable import Api
+import requests
 from datetime import datetime
 from config import AIRTABLE_TOKEN, AIRTABLE_BASE_ID
+
+BASE_URL = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}"
 
 TABLE_TRANSACTIONS = "Транзакции"
 TABLE_CATEGORIES = "Категории"
 TABLE_BUDGET = "Бюджет"
 
 
-def _api():
-    return Api(AIRTABLE_TOKEN)
+def _headers():
+    return {"Authorization": f"Bearer {AIRTABLE_TOKEN}"}
 
 
-def _table(name: str):
-    return _api().table(AIRTABLE_BASE_ID, name)
+def _get_records(table: str) -> list[dict]:
+    url = f"{BASE_URL}/{requests.utils.quote(table)}"
+    records = []
+    params = {}
+    while True:
+        r = requests.get(url, headers=_headers(), params=params)
+        data = r.json()
+        records.extend(data.get("records", []))
+        offset = data.get("offset")
+        if not offset:
+            break
+        params["offset"] = offset
+    return records
+
+
+def _create_record(table: str, fields: dict):
+    url = f"{BASE_URL}/{requests.utils.quote(table)}"
+    requests.post(url, headers=_headers(), json={"fields": fields})
+
+
+def _update_record(table: str, record_id: str, fields: dict):
+    url = f"{BASE_URL}/{requests.utils.quote(table)}/{record_id}"
+    requests.patch(url, headers=_headers(), json={"fields": fields})
+
+
+def _delete_record(table: str, record_id: str):
+    url = f"{BASE_URL}/{requests.utils.quote(table)}/{record_id}"
+    requests.delete(url, headers=_headers())
 
 
 # --- Категории ---
 
 def get_categories() -> list[str]:
-    records = _table(TABLE_CATEGORIES).all()
+    records = _get_records(TABLE_CATEGORIES)
     return [r["fields"].get("Категория", "") for r in records if r["fields"].get("Категория")]
 
 
@@ -26,15 +54,15 @@ def add_category(name: str) -> bool:
     existing = [c.lower() for c in get_categories()]
     if name.lower() in existing:
         return False
-    _table(TABLE_CATEGORIES).create({"Категория": name})
+    _create_record(TABLE_CATEGORIES, {"Категория": name})
     return True
 
 
 def delete_category(name: str) -> bool:
-    records = _table(TABLE_CATEGORIES).all()
+    records = _get_records(TABLE_CATEGORIES)
     for r in records:
         if r["fields"].get("Категория", "").lower() == name.lower():
-            _table(TABLE_CATEGORIES).delete(r["id"])
+            _delete_record(TABLE_CATEGORIES, r["id"])
             return True
     return False
 
@@ -42,7 +70,7 @@ def delete_category(name: str) -> bool:
 # --- Бюджет ---
 
 def get_budgets() -> dict[str, float]:
-    records = _table(TABLE_BUDGET).all()
+    records = _get_records(TABLE_BUDGET)
     result = {}
     for r in records:
         cat = r["fields"].get("Категория", "")
@@ -53,19 +81,19 @@ def get_budgets() -> dict[str, float]:
 
 
 def set_budget(category: str, limit: float):
-    records = _table(TABLE_BUDGET).all()
+    records = _get_records(TABLE_BUDGET)
     for r in records:
         if r["fields"].get("Категория", "").lower() == category.lower():
-            _table(TABLE_BUDGET).update(r["id"], {"Лимит": limit})
+            _update_record(TABLE_BUDGET, r["id"], {"Лимит": limit})
             return
-    _table(TABLE_BUDGET).create({"Категория": category, "Лимит": limit})
+    _create_record(TABLE_BUDGET, {"Категория": category, "Лимит": limit})
 
 
 # --- Транзакции ---
 
 def add_transaction(tx_type: str, amount: float, category: str, description: str):
     now = datetime.now()
-    _table(TABLE_TRANSACTIONS).create({
+    _create_record(TABLE_TRANSACTIONS, {
         "Дата": now.strftime("%d.%m.%Y"),
         "Время": now.strftime("%H:%M"),
         "Тип": tx_type,
@@ -77,37 +105,43 @@ def add_transaction(tx_type: str, amount: float, category: str, description: str
 
 def get_transactions_this_month() -> list[dict]:
     current_month = datetime.now().strftime("%m.%Y")
-    records = _table(TABLE_TRANSACTIONS).all()
+    records = _get_records(TABLE_TRANSACTIONS)
     result = []
     for r in records:
         f = r["fields"]
         if f.get("Дата", "").endswith(current_month):
-            result.append({
-                "date": f.get("Дата", ""),
-                "time": f.get("Время", ""),
-                "type": f.get("Тип", ""),
-                "amount": float(f.get("Сумма", 0)),
-                "category": f.get("Категория", ""),
-                "description": f.get("Описание", ""),
-            })
+            try:
+                result.append({
+                    "date": f.get("Дата", ""),
+                    "time": f.get("Время", ""),
+                    "type": f.get("Тип", ""),
+                    "amount": float(f.get("Сумма", 0)),
+                    "category": f.get("Категория", ""),
+                    "description": f.get("Описание", ""),
+                })
+            except (ValueError, TypeError):
+                pass
     return result
 
 
 def get_transactions_today() -> list[dict]:
     today = datetime.now().strftime("%d.%m.%Y")
-    records = _table(TABLE_TRANSACTIONS).all()
+    records = _get_records(TABLE_TRANSACTIONS)
     result = []
     for r in records:
         f = r["fields"]
         if f.get("Дата") == today:
-            result.append({
-                "date": f.get("Дата", ""),
-                "time": f.get("Время", ""),
-                "type": f.get("Тип", ""),
-                "amount": float(f.get("Сумма", 0)),
-                "category": f.get("Категория", ""),
-                "description": f.get("Описание", ""),
-            })
+            try:
+                result.append({
+                    "date": f.get("Дата", ""),
+                    "time": f.get("Время", ""),
+                    "type": f.get("Тип", ""),
+                    "amount": float(f.get("Сумма", 0)),
+                    "category": f.get("Категория", ""),
+                    "description": f.get("Описание", ""),
+                })
+            except (ValueError, TypeError):
+                pass
     return result
 
 
