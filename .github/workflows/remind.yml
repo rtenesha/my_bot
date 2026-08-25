@@ -1,0 +1,25 @@
+name: birthday-remind
+
+on:
+  schedule:
+    # раз в час (UTC). GitHub Actions cron срабатывает только на ветке по умолчанию.
+    - cron: "3 * * * *"
+  workflow_dispatch:  # ручной запуск для проверки
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - run: python -m remind
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}

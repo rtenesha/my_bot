@@ -8,7 +8,15 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-DB_PATH = os.getenv("DB_PATH", "bot.db")
+# Хранилище. Возможные значения:
+#   - "libsql://<db>.turso.io" / "https://..." / "http://..."  → Turso через libsql (прод)
+#   - "file:./dev.db" или путь к файлу                          → локальная БД (дев/тесты)
+#   - None                                                      → локальный bot.db рядом с процессом
+TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL")
+TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")  # None для локального режима
+
+# Секрет для защиты вебхука/крон-эндпоинта от посторонних вызовов.
+CRON_SECRET = os.getenv("CRON_SECRET", "")
 
 # Дефолты для нового пользователя.
 DEFAULT_TZ = "Europe/Moscow"

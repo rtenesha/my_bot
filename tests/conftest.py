@@ -7,18 +7,17 @@ import db
 
 @pytest.fixture
 def db_path(tmp_path, monkeypatch):
-    """Файл БД (изолированный на тест), monkeypatch-им в db.DB_PATH.
+    """Локальный файл БД (через stdlib sqlite3), monkeypatch в db.TURSO_DATABASE_URL.
 
-    Каждый тест получает свежий путь; init_db() вызывается в самом тесте
-    (или в фикстуре ниже), чтобы схема создавалась через тот же код, что и в проде.
+    Каждый тест — свежий файл; init_db() создаёт схему тем же кодом, что и в проде.
     """
     path = tmp_path / "test.db"
-    monkeypatch.setattr(db, "DB_PATH", str(path))
+    monkeypatch.setattr(db, "TURSO_DATABASE_URL", str(path))
     return str(path)
 
 
 @pytest.fixture
-async def db_ready(db_path):
+def db_ready(db_path):
     """Инициализированная БД с применённой схемой."""
-    await db.init_db()
+    db.init_db()
     return db_path
