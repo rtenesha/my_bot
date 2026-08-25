@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Environment & secrets
+.env
+
+# SQLite
+*.db
+
+# Test / cache
+.pytest_cache/
+
+# OS
+.DS_Store
