@@ -1,2 +1,18 @@
+[project]
+name = "my-bot"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "aiogram==3.13.1",
+    "libsql",
+    "python-dotenv==1.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.4.2",
+    "pytest-asyncio==1.2.0",
+]
+
 [tool.vercel]
 entrypoint = "api.bot:app"
