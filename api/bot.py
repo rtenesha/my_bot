@@ -3,7 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import sys
 from http.server import BaseHTTPRequestHandler
+
+# Vercel запускает функцию из api/, но модули бота лежат в корне проекта —
+# добавляем корень в sys.path, чтобы `import bot`/`db`/`config` работали.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from aiogram import Bot
 
