@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import sys
-from http.server import BaseHTTPRequestHandler
 
-# Vercel запускает функцию из api/, но модули бота лежат в корне проекта —
-# добавляем корень в sys.path, чтобы `import bot`/`db`/`config` работали.
+# Vercel запускает функцию из api/, но модули бота (bot/db/config) лежат в
+# корне проекта — добавляем корень в sys.path, чтобы их импорты работали.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from aiogram import Bot
@@ -22,7 +20,7 @@ logging.basicConfig(level=logging.INFO)
 _initialized = False
 
 
-def _ensure_schema():
+def _ensure_schema() -> None:
     global _initialized
     if not _initialized:
         db.init_db()
@@ -37,34 +35,51 @@ async def _process(payload: dict) -> None:
         await bot.session.close()
 
 
-class handler(BaseHTTPRequestHandler):
-    """Vercel file-based Python-функция: принимает Telegram-вебхук."""
+async def _read_body(receive) -> bytes:
+    body = b""
+    more = True
+    while more:
+        message = await receive()
+        body += message.get("body", b"")
+        more = message.get("more_body", False)
+    return body
 
-    def do_GET(self):
-        # health-check
-        self.send_response(200)
-        self.send_header("Content-Type", "text/plain")
-        self.end_headers()
-        self.wfile.write(b"ok")
 
-    def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length)
-        try:
-            payload = json.loads(body)
-        except (ValueError, json.JSONDecodeError):
-            self.send_response(400)
-            self.end_headers()
-            return
+async def _send_text(send, status: int, text: bytes) -> None:
+    headers = [(b"content-type", b"text/plain; charset=utf-8")]
+    await send({"type": "http.response.start", "status": status, "headers": headers})
+    await send({"type": "http.response.body", "body": text})
 
-        _ensure_schema()
-        try:
-            asyncio.run(_process(payload))
-        except Exception:  # noqa: BLE001 — всегда 200, чтобы Telegram не спамил ретраями
-            logging.exception("webhook processing error")
 
-        self.send_response(200)
-        self.end_headers()
+async def app(scope, receive, send):
+    """ASGI-функция: принимает Telegram-вебхук.
 
-    def log_message(self, *args):  # тишина стандартного лога HTTP-сервера
-        pass
+    Любой POST на этот URL трактуется как апдейт от Telegram и скармливается
+    в aiogram Dispatcher. Всегда отвечаем 200, чтобы Telegram не спамил
+    ретраями (ошибки логируем, но маскируем).
+    """
+    if scope.get("type") != "http":
+        return
+
+    method = scope.get("method", "")
+    if method == "GET":
+        await _send_text(send, 200, b"ok")
+        return
+    if method != "POST":
+        await _send_text(send, 405, b"method not allowed")
+        return
+
+    body = await _read_body(receive)
+    try:
+        payload = json.loads(body)
+    except (ValueError, json.JSONDecodeError):
+        await _send_text(send, 400, b"bad json")
+        return
+
+    _ensure_schema()
+    try:
+        await _process(payload)
+    except Exception:  # noqa: BLE001
+        logging.exception("webhook processing error")
+
+    await _send_text(send, 200, b"ok")
